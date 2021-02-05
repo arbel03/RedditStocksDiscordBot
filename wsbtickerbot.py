@@ -3,15 +3,46 @@ import sys
 import praw
 import time
 import json
+import nltk
 import pprint
 import operator
 import datetime
+import csv
+
+from get_all_tickers import get_tickers as gt
 from praw.models import MoreComments
-from iexfinance import Stock as IEXStock
+#from iexfinance import Stock as IEXStock
+from iexfinance.stocks import Stock as IEXStock
+from nltk.corpus import words, wordnet
+from names_dataset import NameDataset
 
 # to add the path for Python to search for files to use my edited version of vaderSentiment
 sys.path.insert(0, 'vaderSentiment/vaderSentiment')
-from vaderSentiment import SentimentIntensityAnalyzer
+#from vaderSentiment import SentimentIntensityAnalyzer
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+m = NameDataset()
+
+slang_filename = "slang_dict.doc"
+
+tickers = []
+with open("tickers.csv",'r', errors='ignore') as tickFile:
+    tickReader = csv.reader(tickFile)
+    for row in tickReader:
+        tickers.append(row[0])
+#print(tickers)
+#raise Exception("")
+slang_data = []
+with open(slang_filename,'r', errors='ignore') as exRtFile:
+    exchReader = csv.reader(exRtFile,delimiter='`',quoting=csv.QUOTE_NONE)
+    for row in exchReader:
+        slang_data.append(row)
+
+slang_terms = [row[0] for row in slang_data]
+#print(slang_terms)
+#raise Exception("done")
+#slang_data[1] contains Acronyms
+#slang_data[2] contains meaning phrases
 
 def extract_ticker(body, start_index):
    """
@@ -36,6 +67,7 @@ def extract_ticker(body, start_index):
 
 def parse_section(ticker_dict, body):
    """ Parses the body of each comment/reply """
+   eng_words = [w.upper() for w in words.words()]
    blacklist_words = [
       "YOLO", "TOS", "CEO", "CFO", "CTO", "DD", "BTFD", "WSB", "OK", "RH",
       "KYS", "FD", "TYS", "US", "USA", "IT", "ATH", "RIP", "BMW", "GDP",
@@ -47,14 +79,21 @@ def parse_section(ticker_dict, body):
       "OP", "DJIA", "PS", "AH", "TL", "DR", "JAN", "FEB", "JUL", "AUG",
       "SEP", "SEPT", "OCT", "NOV", "DEC", "FDA", "IV", "ER", "IPO", "RISE"
       "IPA", "URL", "MILF", "BUT", "SSN", "FIFA", "USD", "CPU", "AT",
-      "GG", "ELON"
+      "GG", "ELON", "HOLD", "LINE", "SUB", "MAKE", "BOT", "PPL", "BUY",
+      "MOON", "APES", "GO", "WORD", "CALL", "TOUR", "LOVE", "STAY",
+      "HAHA", "ALOT", "COM", "GOV", "ORG", "TF", "MONKE"
    ]
-
+   blacklist_words.extend(eng_words)
+   blacklist_words.extend(list(set(slang_terms).difference(set(tickers))))
+   
+   #print(blacklist_words)
    if '$' in body:
+      #print(body)
       index = body.find('$') + 1
       word = extract_ticker(body, index)
       
       if word and word not in blacklist_words:
+         #print(word)
          try:
             # special case for $ROPE
             if word != "ROPE":
@@ -63,24 +102,38 @@ def parse_section(ticker_dict, body):
                   ticker_dict[word].count += 1
                   ticker_dict[word].bodies.append(body)
                else:
+                  #print("adding %s to dictionary", word)
                   ticker_dict[word] = Ticker(word)
                   ticker_dict[word].count = 1
                   ticker_dict[word].bodies.append(body)
-         except:
+         except Exception as e:
+            #print("exception in adding %s to dictionary", word)
+            #print(e)
             pass
    
    # checks for non-$ formatted comments, splits every body into list of words
-   word_list = re.sub("[^\w]", " ",  body).split()
+   words_ = body.split()
+   words_ = [w for w in words_ if w.isalpha()]
+   #word_string = re.sub("[^\w]", " ",  body)
+   word_string = " ".join(words_)
+   word_list_tokens = nltk.word_tokenize(str.lower(word_string))
+   word_list_pos = nltk.pos_tag(word_list_tokens)
+   word_list = [w[0].upper() for w in word_list_pos]
+   word_tokens = [w[1] for w in word_list_pos]
    for count, word in enumerate(word_list):
       # initial screening of words
-      if word.isupper() and len(word) != 1 and (word.upper() not in blacklist_words) and len(word) <= 5 and word.isalpha():
+      #if word == "AMC":
+         #print(word_tokens[count])
+      if word.isupper() and len(word) != 1 and (word.upper() not in blacklist_words) and len(word) <= 5 and word.isalpha() and word_tokens[count] in ["NNP"] and not wordnet.synsets(word) and not m.search_first_name(word) and not m.search_first_name(word):
          # sends request to IEX API to determine whether the current word is a valid ticker
          # if it isn't, it'll return an error and therefore continue on to the next word
          try:
             # special case for $ROPE
             if word != "ROPE":
                price = IEXStock(word).get_price()
-         except:
+         except Exception as e:
+            #print("exception in updating count of %s in dictionary", word)
+            #print(e)
             continue
       
          # add/adjust value of dictionary
@@ -88,6 +141,7 @@ def parse_section(ticker_dict, body):
             ticker_dict[word].count += 1
             ticker_dict[word].bodies.append(body)
          else:
+            #print("updating count of %s in dictionary", word)
             ticker_dict[word] = Ticker(word)
             ticker_dict[word].count = 1
             ticker_dict[word].bodies.append(body)
@@ -183,8 +237,9 @@ def run(mode, sub, num_submissions):
 
    total_mentions = 0
    ticker_list = []
+
    for key in ticker_dict:
-      # print(key, ticker_dict[key].count)
+      #print(key, ticker_dict[key].count)
       total_mentions += ticker_dict[key].count
       ticker_list.append(ticker_dict[key])
 
@@ -248,6 +303,8 @@ if __name__ == "__main__":
 
    if len(sys.argv) > 2:
       mode = 1
+      sub = sys.argv[1]
       num_submissions = int(sys.argv[2])
 
    run(mode, sub, num_submissions)
+
