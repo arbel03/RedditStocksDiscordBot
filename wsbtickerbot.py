@@ -18,10 +18,7 @@ from iexfinance.stocks import Stock as IEXStock
 from names_dataset import NameDataset
 from nltk.corpus import words, wordnet
 from praw.models import MoreComments
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-
-# to add the path for Python to search for files to use my edited version of vaderSentiment
-sys.path.insert(0, 'vaderSentiment/vaderSentiment')
+from vaderSentiment.vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 
 def extract_ticker(body, start_index):
@@ -42,7 +39,7 @@ def extract_ticker(body, start_index):
         # if it should return
         if not char.isalpha():
             # if there aren't any letters following the $
-            if (count == 0):
+            if count == 0:
                 return None
 
             return ticker.upper()
@@ -100,10 +97,14 @@ def get_url(key, value, total_count):
            .format(key, value, mention, perc_mentions)
 
 
-def parse_section(ticker_dict, body):
+def parse_section(body, names, slang_terms, tickers, ticker_dict={}):
     """ Parses the body of each comment/reply and adds to the ticker object dictionary
-    :ticker_dict: initially dictionary of tickers
-    :body: text body to use for parsing
+
+    :body (str): text body to use for parsing
+    :names (NameDataset): names from names dataset
+    :slang_terms (list): list of internet slang words
+    :tickers (list): list of valid tickers
+    :ticker_dict (dict): initial dictionary of tickers
     :returns: ticker_dict(dict[Ticker]): updated with extracted tickers and their properties
     """
 
@@ -142,6 +143,8 @@ def parse_section(ticker_dict, body):
                         ticker_dict[word].count = 1
                         ticker_dict[word].bodies.append(body)
             except Exception as e:
+                print("exception in adding %s to dictionary", word)
+                print(e)
                 pass
 
     words_ = body.split()
@@ -163,8 +166,8 @@ def parse_section(ticker_dict, body):
                 if word != "ROPE":
                     price = IEXStock(word).get_price()
             except Exception as e:
-                # print("exception in updating count of %s in dictionary", word)
-                # print(e)
+                print("exception in updating count of %s in dictionary", word)
+                print(e)
                 continue
 
             if word in ticker_dict:
@@ -184,7 +187,7 @@ def read_csv_files(filename, data=[], **kwargs):
     :param kwargs: additional formatting arguments for csv.reader
     :return: data(list) = list of parsed rows in a column
     """
-    with open(slang_filename, 'r', errors='ignore') as File:
+    with open(filename, 'r', errors='ignore') as File:
         file_reader = csv.reader(File, **kwargs)
         for row in file_reader:
             data.append(row[0])
@@ -206,11 +209,10 @@ def run(mode, sub, num_submissions):
     """
     names = NameDataset()
     slang_filename = "slang_dict.doc"
-    slang_terms = read_csv_files(slang_filename, slang_terms, delimiter='`', quoting=csv.QUOTE_NONE)
-    text = ""
-    tickers = read_csv_files(tickers_filename, tickers)
-    ticker_dict = {}
+    slang_terms = read_csv_files(slang_filename, delimiter='`', quoting=csv.QUOTE_NONE)
     tickers_filename = "tickers.csv"
+    tickers = read_csv_files(tickers_filename)
+    ticker_dict = {}
     total_count = 0
     within24_hrs = False
 
@@ -219,7 +221,7 @@ def run(mode, sub, num_submissions):
 
     for count, post in enumerate(new_posts):
         if not post.clicked:
-            ticker_dict = parse_section(ticker_dict, post.title)
+            ticker_dict = parse_section(post.title, names, slang_terms, tickers, ticker_dict)
 
             if "Daily Discussion Thread - " in post.title:
                 if not within24_hrs:
@@ -234,7 +236,7 @@ def run(mode, sub, num_submissions):
                 # option
                 if isinstance(comment, MoreComments):
                     continue
-                ticker_dict = parse_section(ticker_dict, comment.body)
+                ticker_dict = parse_section(comment.body, names, slang_terms, tickers, ticker_dict)
 
                 replies = comment.replies
                 for rep in replies:
@@ -242,12 +244,12 @@ def run(mode, sub, num_submissions):
                     # comments" option
                     if isinstance(rep, MoreComments):
                         continue
-                    ticker_dict = parse_section(ticker_dict, rep.body)
+                    ticker_dict = parse_section(rep.body, names, slang_terms, tickers, ticker_dict)
 
             sys.stdout.write("\rProgress: {0} / {1} posts".format(count + 1, num_submissions))
             sys.stdout.flush()
 
-    text = "To help you YOLO your money away, here are all of the tickers mentioned at least 10 times in all the posts " \ 
+    text = "To help you YOLO your money away, here are all of the tickers mentioned at least 10 times in all the posts " \
            "within the past 24 hours (and links to their Yahoo Finance page) along with a sentiment analysis " \
            "percentage: "
     text += "\n\nTicker | Mentions | Bullish (%) | Neutral (%) | Bearish (%)\n:- | :- | :- | :- | :-"
