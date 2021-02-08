@@ -18,7 +18,7 @@ from iexfinance.stocks import Stock as IEXStock
 from names_dataset import NameDataset
 from nltk.corpus import words, wordnet
 from praw.models import MoreComments
-from vaderSentiment.vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 
 def extract_ticker(body, start_index):
