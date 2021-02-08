@@ -8,48 +8,13 @@ import json
 import re
 import sys
 
-import nltk
 import operator
 import pprint
 import praw
 import time
 
-from iexfinance.stocks import Stock as IEXStock
-from names_dataset import NameDataset
-from nltk.corpus import words, wordnet
 from praw.models import MoreComments
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-
-
-def extract_ticker(body, start_index):
-    """
-   Given a starting index and text, this will extract the ticker, return None if it is incorrectly formatted.
-
-   Inputs:
-       body (str): sentence / paragraph of text
-       start_index (int):
-
-   Returns:
-       ticker (str): the extracted ticker
-   """
-    count = 0
-    ticker = ""
-
-    for char in body[start_index:]:
-        # if it should return
-        if not char.isalpha():
-            # if there aren't any letters following the $
-            if count == 0:
-                return None
-
-            return ticker.upper()
-        else:
-            ticker += char
-            count += 1
-
-    ticker = ticker.upper()
-
-    return ticker
 
 
 def final_post(subreddit, text, discussion_thread):
@@ -97,11 +62,10 @@ def get_url(key, value, total_count):
            .format(key, value, mention, perc_mentions)
 
 
-def parse_section(body, names, slang_terms, tickers, ticker_dict={}):
+def parse_section(body, slang_terms, tickers, ticker_dict={}):
     """ Parses the body of each comment/reply and adds to the ticker object dictionary
 
     :body (str): text body to use for parsing
-    :names (NameDataset): names from names dataset
     :slang_terms (list): list of internet slang words
     :tickers (list): list of valid tickers
     :ticker_dict (dict): initial dictionary of tickers
@@ -125,57 +89,25 @@ def parse_section(body, names, slang_terms, tickers, ticker_dict={}):
     ]
 
     blacklist_words.extend(list(set(slang_terms).difference(set(tickers))))
+    found_tickers = re.findall(r'\$[A-Za-z]+', body)
+    found_tickers = [ft[1:].upper() for ft in found_tickers]
 
-    if '$' in body:
-        index = body.find('$') + 1
-        word = extract_ticker(body, index)
-
-        if word and word not in blacklist_words:
-            try:
-                # special case for $ROPE
-                if word != "ROPE":
-                    price = IEXStock(word).get_price()
-                    if word in ticker_dict:
-                        ticker_dict[word].count += 1
-                        ticker_dict[word].bodies.append(body)
-                    else:
-                        ticker_dict[word] = Ticker(word)
-                        ticker_dict[word].count = 1
-                        ticker_dict[word].bodies.append(body)
-            except Exception as e:
-                print("exception in adding %s to dictionary", word)
-                print(e)
-                pass
-
-    words_ = body.split()
-    words_ = [w for w in words_ if w.isalpha()]
-    word_string = " ".join(words_)
-    word_list_tokens = nltk.word_tokenize(str.lower(word_string))
-    word_list_pos = nltk.pos_tag(word_list_tokens)
-    word_list = [w[0].upper() for w in word_list_pos]
-    word_tokens = [w[1] for w in word_list_pos]
+    word_list = re.sub(r"[^\w]", " ",  body).split()
+    word_list = [w.upper() for w in word_list]
 
     for count, word in enumerate(word_list):
-        if word.isupper() and len(word) != 1 and (word not in blacklist_words) and len(word) <= 5 \
-                and word.isalpha() and word_tokens[count] in ["NNP"] and not wordnet.synsets(word) \
-                and not names.search_first_name(word) and not names.search_first_name(word):
-            # sends request to IEX API to determine whether the current word is a valid ticker
-            # if it isn't, it'll return an error and therefore continue on to the next word
-            try:
-                # special case for $ROPE
-                if word != "ROPE":
-                    price = IEXStock(word).get_price()
-            except Exception as e:
-                print("exception in updating count of %s in dictionary", word)
-                print(e)
-                continue
 
-            if word in ticker_dict:
-                ticker_dict[word].count += 1
+        if len(word) in range(2, 6):
+            found_tickers.append(word)
+
+    for ft in found_tickers:
+        if ft in tickers and ft not in blacklist_words and ft != "ROPE":
+            if ft in ticker_dict:
+                ticker_dict[ft].count += 1
             else:
-                ticker_dict[word] = Ticker(word)
-                ticker_dict[word].count = 1
-            ticker_dict[word].bodies.append(body)
+                ticker_dict[ft] = Ticker(ft)
+                ticker_dict[ft].count = 1
+            ticker_dict[ft].bodies.append(body)
 
     return ticker_dict
 
@@ -207,7 +139,6 @@ def run(mode, sub, num_submissions):
     :num_submissions(int): number of reddit comments to obtain
     :generates: all the resulting actions of the bot
     """
-    names = NameDataset()
     slang_filename = "slang_dict.doc"
     slang_terms = read_csv_files(slang_filename, delimiter='`', quoting=csv.QUOTE_NONE)
     tickers_filename = "tickers.csv"
@@ -221,7 +152,7 @@ def run(mode, sub, num_submissions):
 
     for count, post in enumerate(new_posts):
         if not post.clicked:
-            ticker_dict = parse_section(post.title, names, slang_terms, tickers, ticker_dict)
+            ticker_dict = parse_section(post.title, slang_terms, tickers, ticker_dict)
 
             if "Daily Discussion Thread - " in post.title:
                 if not within24_hrs:
@@ -236,7 +167,7 @@ def run(mode, sub, num_submissions):
                 # option
                 if isinstance(comment, MoreComments):
                     continue
-                ticker_dict = parse_section(comment.body, names, slang_terms, tickers, ticker_dict)
+                ticker_dict = parse_section(comment.body, slang_terms, tickers, ticker_dict)
 
                 replies = comment.replies
                 for rep in replies:
@@ -244,7 +175,7 @@ def run(mode, sub, num_submissions):
                     # comments" option
                     if isinstance(rep, MoreComments):
                         continue
-                    ticker_dict = parse_section(rep.body, names, slang_terms, tickers, ticker_dict)
+                    ticker_dict = parse_section(rep.body, slang_terms, tickers, ticker_dict)
 
             sys.stdout.write("\rProgress: {0} / {1} posts".format(count + 1, num_submissions))
             sys.stdout.flush()
