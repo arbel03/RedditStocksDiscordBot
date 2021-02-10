@@ -9,21 +9,12 @@ While the intention of this bot was to simply create another talking point withi
 
 ## My modifications so far
 
-I have mainly improved the parsing capabilities of the bot.
+- I have mainly improved the parsing capabilities of the bot in **wsbtickerbot.py**. I am still working on the parsing of non-cashtag tickers as it is a full-blown data science problem that cannot be solved by a table lookup or rules-based approach. It is worthwhile as 80 - 90 percent of tickers in comments do not have cashtags.
 
-From my initial commit:
+- I have a variation that only uses cashtags in **wsbtickerbot_cashtags_only.py**.
 
-NLP Data cleaning:
-    a) removed tickers that are English words
-    b) filtered out tickers that are not nouns (only filtering for proper nouns removes too much such as 'AMC')
-    c) filtered out some internet slang but the list that I found is not comprehensive. 
-    d) obtained a more robust word list to filter “TV”, “mom”
-    e) changed the predecessor’s method of cleaning to remove an words containing punctuation so web     	page extensions stop showing up as tickers
-    f) remove first and last names using a module
-    g) obtained a static list of tickers to check to prevent the internet slag from removing too much like 	BB and NOK.
-    h) hard coded a list of slang words to not be considered.
+- I have another variation in **wsbtickerbot_cashtags_only_input_file.py** that takes in an input file. This approach circumvents the 24 hour limit of praw and it can analyze two months of scraped data (example in **Data Sources**) in minutes for 10 million comments. Note that the first column should contain the text content, whether it is the title of a post or a body of a comment. It's best that a dataset is filtered beforehand from an original scraped dataset to just have the text content, especially if it is very large.
 
-## Note:
-I have my IEX_TOKEN saved as a path variable.
-
-In a bash terminal: export IEX_TOKEN=<YOUR_IEX_SECRET_KEY>
+## Data Sources:
+- Stock tickers are from https://github.com/shilewenuw/get_all_tickers/tree/master/get_all_tickers
+- 2 months of wallstreetbets datasets: https://www.kaggle.com/mattpodolak/rwallstreetbets-posts-and-comments; how to scrape similar datasets: https://www.reddit.com/r/datasets/comments/ldozc6/how_to_create_large_datasets_from_reddit/ 

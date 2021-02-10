@@ -64,46 +64,19 @@ def get_url(key, value, total_count):
            .format(key, value, mention, perc_mentions)
 
 
-def parse_section(body, slang_terms, tickers, ticker_dict={}):
+def parse_section(body, tickers, ticker_dict={}):
     """ Parses the body of each comment/reply and adds to the ticker object dictionary
 
     :body (str): text body to use for parsing
-    :slang_terms (list): list of internet slang words
     :tickers (list): list of valid tickers
     :ticker_dict (dict): initial dictionary of tickers
     :returns: ticker_dict(dict[Ticker]): updated with extracted tickers and their properties
     """
-
-    blacklist_words = [
-        "YOLO", "TOS", "CEO", "CFO", "CTO", "DD", "BTFD", "WSB", "OK", "RH",
-        "KYS", "FD", "TYS", "US", "USA", "IT", "ATH", "RIP", "BMW", "GDP",
-        "OTM", "ATM", "ITM", "IMO", "LOL", "DOJ", "BE", "PR", "PC", "ICE",
-        "TYS", "ISIS", "PRAY", "PT", "FBI", "SEC", "GOD", "NOT", "POS", "COD",
-        "AYYMD", "FOMO", "TL;DR", "EDIT", "STILL", "LGMA", "WTF", "RAW", "PM",
-        "LMAO", "LMFAO", "ROFL", "EZ", "RED", "BEZOS", "TICK", "IS", "DOW"
-        "AM", "PM", "LPT", "GOAT", "FL", "CA", "IL", "PDFUA", "MACD", "HQ",
-        "OP", "DJIA", "PS", "AH", "TL", "DR", "JAN", "FEB", "JUL", "AUG",
-        "SEP", "SEPT", "OCT", "NOV", "DEC", "FDA", "IV", "ER", "IPO", "RISE"
-        "IPA", "URL", "MILF", "BUT", "SSN", "FIFA", "USD", "CPU", "AT",
-        "GG", "ELON", "HOLD", "LINE", "SUB", "MAKE", "BOT", "PPL", "BUY",
-        "MOON", "APES", "GO", "WORD", "CALL", "TOUR", "LOVE", "STAY",
-        "HAHA", "ALOT", "COM", "GOV", "ORG", "TF", "MONKE"
-    ]
-
-    blacklist_words.extend(list(set(slang_terms).difference(set(tickers))))
     found_tickers = re.findall(r'\$[A-Za-z]+', body)
     found_tickers = [ft[1:].upper() for ft in found_tickers]
 
-    word_list = re.sub(r"[^\w]", " ",  body).split()
-    word_list = [w.upper() for w in word_list]
-
-    for count, word in enumerate(word_list):
-
-        if len(word) in range(2, 6):
-            found_tickers.append(word)
-
     for ft in found_tickers:
-        if ft in tickers and ft not in blacklist_words and ft != "ROPE":
+        if ft in tickers:
             if ft in ticker_dict:
                 ticker_dict[ft].count += 1
             else:
@@ -126,8 +99,6 @@ def run(mode, sub, num_submissions):
     :num_submissions(int): number of reddit comments to obtain
     :generates: all the resulting actions of the bot
     """
-    slang_filename = "slang_dict.doc"
-    slang_terms = util.read_csv_files(slang_filename, delimiter='`', quoting=csv.QUOTE_NONE)
     tickers_filename = "tickers.csv"
     tickers = util.read_csv_files(tickers_filename)
     ticker_dict = {}
@@ -139,7 +110,7 @@ def run(mode, sub, num_submissions):
 
     for count, post in enumerate(new_posts):
         if not post.clicked:
-            ticker_dict = parse_section(post.title, slang_terms, tickers, ticker_dict)
+            ticker_dict = parse_section(post.title, tickers, ticker_dict)
 
             if "Daily Discussion Thread - " in post.title:
                 if not within24_hrs:
@@ -154,7 +125,7 @@ def run(mode, sub, num_submissions):
                 # option
                 if isinstance(comment, MoreComments):
                     continue
-                ticker_dict = parse_section(comment.body, slang_terms, tickers, ticker_dict)
+                ticker_dict = parse_section(comment.body, tickers, ticker_dict)
 
                 replies = comment.replies
                 for rep in replies:
@@ -162,7 +133,7 @@ def run(mode, sub, num_submissions):
                     # comments" option
                     if isinstance(rep, MoreComments):
                         continue
-                    ticker_dict = parse_section(rep.body, slang_terms, tickers, ticker_dict)
+                    ticker_dict = parse_section(rep.body, tickers, ticker_dict)
 
             sys.stdout.write("\rProgress: {0} / {1} posts".format(count + 1, num_submissions))
             sys.stdout.flush()
