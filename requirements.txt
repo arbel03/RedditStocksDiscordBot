@@ -1,0 +1,8 @@
+asyncpraw
+vaderSentiment
+discord
+terminaltables
+pandas
+sqlalchemy
+# psycopg2
+cx_Oracle

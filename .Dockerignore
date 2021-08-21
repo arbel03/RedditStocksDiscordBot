@@ -1,0 +1,14 @@
+__pycache__/
+
+*.pyc
+
+config.json
+
+*.egg-info/
+
+Dockerfile
+.Dockerignore
+
+README.md
+
+.vscode/
