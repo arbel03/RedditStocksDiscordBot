@@ -1,9 +1,5 @@
 # Adaptation of wsbtickerbot
 
-## Add the bot to your discord server
-
-https://discord.com/api/oauth2/authorize?client_id=875781175971549265&permissions=2048&scope=bot
-
 ## Original purpose
 wsbtickerbot is a Reddit bot, developed utilizing the Reddit PRAW API, that scrapes the entirety of r/wallstreetbets over a 24 hour period, collects all the tickers mentioned, and then performs sentiment analysis on the context. The sentiment analysis is used to classify the stocks into three categories: bullish, neutral, and bearish.
 
